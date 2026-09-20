@@ -13,6 +13,11 @@ int main(int argc, char *argv[])
 	}
 
 	char *reverted_str = malloc(sizeof(char) * (strlen(argv[1]) + 1));
+	if (reverted_str == NULL)
+	{
+		fprintf(stderr, "Memory allocation failed\n");
+		return EXIT_FAILURE;
+	}
 	strcpy(reverted_str, argv[1]);
 
 	RevertString(reverted_str);
@@ -21,4 +26,3 @@ int main(int argc, char *argv[])
 	free(reverted_str);
 	return 0;
 }
-

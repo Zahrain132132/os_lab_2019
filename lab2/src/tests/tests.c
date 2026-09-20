@@ -37,7 +37,6 @@ int main() {
   }
 
   /* add the tests to the suite */
-  /* NOTE - ORDER IS IMPORTANT - MUST TEST fread() AFTER fprintf() */
   if ((NULL == CU_add_test(pSuite, "test of RevertString function",
                            testRevertString))) {
     CU_cleanup_registry();
@@ -47,6 +46,8 @@ int main() {
   /* Run all tests using the CUnit Basic interface */
   CU_basic_set_mode(CU_BRM_VERBOSE);
   CU_basic_run_tests();
+  unsigned int failures = CU_get_number_of_failures();
+  CU_ErrorCode error = CU_get_error();
   CU_cleanup_registry();
-  return CU_get_error();
+  return error != CUE_SUCCESS || failures != 0;
 }
