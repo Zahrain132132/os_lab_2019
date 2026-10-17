@@ -1,0 +1,15 @@
+# Исполняемые файлы
+parallel_min_max
+process_memory
+zombie_demo
+psum
+
+# Объектные файлы
+*.o
+
+# Библиотеки
+*.a
+*.so
+
+# Временные результаты
+result_*.txt
