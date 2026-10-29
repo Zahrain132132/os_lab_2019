@@ -1,0 +1,6 @@
+
+# Lab 5 compiled binaries
+/lab5/src/mutex_no_lock
+/lab5/src/mutex_with_lock
+/lab5/src/factorial
+/lab5/src/deadlock
