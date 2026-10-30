@@ -1,9 +1,11 @@
+#include "common.h"
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <inttypes.h>
 
 #include <getopt.h>
 #include <netinet/in.h>
@@ -17,32 +19,29 @@ struct FactorialArgs {
   uint64_t begin;
   uint64_t end;
   uint64_t mod;
+  uint64_t result;
 };
 
-uint64_t MultModulo(uint64_t a, uint64_t b, uint64_t mod) {
-  uint64_t result = 0;
-  a = a % mod;
-  while (b > 0) {
-    if (b % 2 == 1)
-      result = (result + a) % mod;
-    a = (a * 2) % mod;
-    b /= 2;
-  }
-
-  return result % mod;
-}
-
 uint64_t Factorial(const struct FactorialArgs *args) {
-  uint64_t ans = 1;
+    uint64_t ans = 1 % args->mod;
 
-  // TODO: your code here
+    for (uint64_t i = args->begin; ; ++i) {
+        ans = MultModulo(ans, i, args->mod);
 
-  return ans;
+        if (i == args->end)
+            break;
+    }
+
+    return ans;
 }
 
 void *ThreadFactorial(void *args) {
-  struct FactorialArgs *fargs = (struct FactorialArgs *)args;
-  return (void *)(uint64_t *)Factorial(fargs);
+    struct FactorialArgs *fargs =
+        (struct FactorialArgs *)args;
+
+    fargs->result = Factorial(fargs);
+
+    return NULL;
 }
 
 int main(int argc, char **argv) {
@@ -50,7 +49,6 @@ int main(int argc, char **argv) {
   int port = -1;
 
   while (true) {
-    int current_optind = optind ? optind : 1;
 
     static struct option options[] = {{"port", required_argument, 0, 0},
                                       {"tnum", required_argument, 0, 0},
@@ -132,7 +130,7 @@ int main(int argc, char **argv) {
     while (true) {
       unsigned int buffer_size = sizeof(uint64_t) * 3;
       char from_client[buffer_size];
-      int read = recv(client_fd, from_client, buffer_size, 0);
+      int read = recv(client_fd, from_client, buffer_size, MSG_WAITALL);
 
       if (!read)
         break;
@@ -140,12 +138,12 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Client read failed\n");
         break;
       }
-      if (read < buffer_size) {
+      if (read < 0 || (size_t)read < buffer_size) {
         fprintf(stderr, "Client send wrong data format\n");
         break;
       }
 
-      pthread_t threads[tnum];
+      // pthread_t threads[tnum];
 
       uint64_t begin = 0;
       uint64_t end = 0;
@@ -154,30 +152,49 @@ int main(int argc, char **argv) {
       memcpy(&end, from_client + sizeof(uint64_t), sizeof(uint64_t));
       memcpy(&mod, from_client + 2 * sizeof(uint64_t), sizeof(uint64_t));
 
-      fprintf(stdout, "Receive: %llu %llu %llu\n", begin, end, mod);
+      fprintf(stdout, "Receive: %" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+        begin, end, mod);
 
-      struct FactorialArgs args[tnum];
-      for (uint32_t i = 0; i < tnum; i++) {
-        // TODO: parallel somehow
-        args[i].begin = 1;
-        args[i].end = 1;
-        args[i].mod = mod;
+     if (mod == 0 || begin == 0 || end < begin) {
+    fprintf(stderr, "Invalid task parameters\n");
+    break;
+}
 
-        if (pthread_create(&threads[i], NULL, ThreadFactorial,
-                           (void *)&args[i])) {
-          printf("Error: pthread_create failed!\n");
-          return 1;
-        }
-      }
+uint64_t count = end - begin + 1;
+int active = count < (uint64_t)tnum ? (int)count : tnum;
 
-      uint64_t total = 1;
-      for (uint32_t i = 0; i < tnum; i++) {
-        uint64_t result = 0;
-        pthread_join(threads[i], (void **)&result);
-        total = MultModulo(total, result, mod);
-      }
+pthread_t threads[active];
+struct FactorialArgs args[active];
 
-      printf("Total: %llu\n", total);
+uint64_t base = count / (uint64_t)active;
+uint64_t extra = count % (uint64_t)active;
+uint64_t next = begin;
+
+// Создаем потоки и распределяем диапазоны
+for (int i = 0; i < active; ++i) {
+    uint64_t span = base + ((uint64_t)i < extra ? 1 : 0);
+
+    args[i].begin = next;
+    args[i].end = next + span - 1;
+    args[i].mod = mod;
+    args[i].result = 0;
+
+    next += span;
+
+    if (pthread_create(&threads[i], NULL,
+                       ThreadFactorial, &args[i]) != 0) {
+        fprintf(stderr, "pthread_create failed\n");
+        return 1;
+    }
+}
+
+// Собираем результаты
+uint64_t total = 1 % mod;
+
+for (int i = 0; i < active; ++i) {
+    pthread_join(threads[i], NULL);
+    total = MultModulo(total, args[i].result, mod);
+}
 
       char buffer[sizeof(total)];
       memcpy(buffer, &total, sizeof(total));
